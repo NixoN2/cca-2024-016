@@ -1,0 +1,9 @@
+1) run setup_envs.ps1
+2) run start_cluster.ps1
+3) if validation is not successful after 10m then you can run validate_cluster.ps1
+4) run setup_memcached.ps1 and setup_mcperf.ps1 in separate powershells (total 4 powershells)
+5) run setup_client_a.ps1 in powershell1, client_b in powershell2, client_measurement in powershell3
+6) run run_jobs.ps1 in powershell4
+7) after run_jobs.ps1 finished then run get_results.ps1
+8) run cleanup.ps1
+9) run finish_cluster.ps1

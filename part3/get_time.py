@@ -12,9 +12,6 @@ if len(sys.argv) < 2:
 # Path to the JSON file
 json_file_path = sys.argv[1]
 
-print(json_file_path)
-
-
 json_data = None
 
 try:
@@ -22,14 +19,9 @@ try:
     with open(json_file_path, 'r', encoding='utf-8-sig') as file:
         # Read the content and decode it to Unicode
         content = file.read()
-
-        print(content)
         
         # Load the JSON data
         json_data = json.loads(content)
-        
-        # Print the JSON data
-        print(json_data)
 
 except FileNotFoundError:
     print(f"File not found: {json_file_path}")
@@ -39,8 +31,6 @@ except json.JSONDecodeError as e:
     
 except Exception as e:
     print(f"Error: {e}")
-
-print(json_data)
 
 start_times = []
 completion_times = []

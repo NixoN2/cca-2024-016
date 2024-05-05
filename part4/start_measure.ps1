@@ -28,6 +28,30 @@ $nodesOutput -split "`n" | ForEach-Object {
 
 Write-Host "Retrieved client agent IP:" $clientAgentIP
 
+$remoteCommandMeasureTask1 = @"
+cd memcache-perf-dynamic;
+./mcperf -s $memcacheServerIP --loadonly;
+./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 5 --scan 5000:125000:5000;
+"@
+
+$remoteCommandMeasureTask2 = @"
+cd memcache-perf-dynamic;
+./mcperf -s $memcacheServerIP --loadonly;
+./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 1800 --qps_interval 10 --qps_min 5000 --qps_max 100000;
+"@
+
+$remoteCommandMeasureTask3 = @"
+cd memcache-perf-dynamic;
+./mcperf -s $memcacheServerIP --loadonly;
+./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 1800 --qps_interval 10 --qps_min 5000 --qps_max 100000 --qps_seed 3274;
+"@
+
+$remoteCommandMeasureTask4 = @"
+cd memcache-perf-dynamic;
+./mcperf -s $memcacheServerIP --loadonly;
+./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 1800 --qps_interval 5 --qps_min 5000 --qps_max 100000 --qps_seed 3274;
+"@
+
 $remoteCommandMeasure= @"
 cd memcache-perf-dynamic;
 ./mcperf -s $memcacheServerIP --loadonly;
@@ -35,7 +59,7 @@ cd memcache-perf-dynamic;
 "@
 
 $gcloudCommandMeasure = @"
-gcloud compute ssh --ssh-key-file $sshKeyFile ubuntu@$clientMeasure --zone europe-west3-a --command "$remoteCommandMeasure"
+gcloud compute ssh --ssh-key-file $sshKeyFile ubuntu@$clientMeasure --zone europe-west3-a --command "$remoteCommandMeasureTask1"
 "@
 
 $outputFilePath = "mcperf.txt"

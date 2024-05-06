@@ -59,7 +59,7 @@ cd memcache-perf-dynamic;
 "@
 
 $gcloudCommandMeasure = @"
-gcloud compute ssh --ssh-key-file $sshKeyFile ubuntu@$clientMeasure --zone europe-west3-a --command "$remoteCommandMeasureTask1"
+gcloud compute ssh --ssh-key-file $sshKeyFile ubuntu@$clientMeasure --zone europe-west3-a --command "$remoteCommandMeasureTask2"
 "@
 
 $outputFilePath = "mcperf.txt"

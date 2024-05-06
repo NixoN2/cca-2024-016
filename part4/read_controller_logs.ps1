@@ -7,14 +7,11 @@ $memcacheServer = $nodesOutput -split "`n" | ForEach-Object {
     }
 }
 
-$memcacheServerIP = ($nodesOutput -split "`n" | Where-Object { $_ -match '^(memcache-server-)\S+' } | ForEach-Object { ($_ -split '\s+')[5] }).Trim()
-
 Write-Host "memcache-server:" $memcacheServer
-Write-Host "memcache-server ip:" $memcacheServerIP
-
 
 $remoteCommand = @"
-sudo -S usermod -aG docker ubuntu;
+ls;
+cat log20240506_181920.txt;
 "@
 
 
@@ -23,5 +20,6 @@ $gcloudCommand = @"
 gcloud compute ssh --ssh-key-file $sshKeyFile ubuntu@$memcacheServer --zone europe-west3-a --command "$remoteCommand"
 "@
 
-Invoke-Expression -Command $gcloudCommand
+$output = Invoke-Expression -Command $gcloudCommand
 
+Write-Host $output

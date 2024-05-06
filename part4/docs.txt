@@ -1,0 +1,18 @@
+1) Open 4 powershells and in every of them run ./setup_envs (don't forget to change bucket to your ethz account)
+2) run ./start_cluster.ps1 in one powershell
+3) run ./setup_memcached.ps1 and ./setup_agent.ps1 and ./setup_measure.ps1 in 3 different powershells. Can be done in parallel
+also choose mode in which setup_measure runs (there are 4 modes for 4 tasks)
+4) run ./start_agent.ps1, ./start_measure.ps1 in 2 powershells
+5) Open ssh connection to memcached server using kubectl get nodes and gcloud compute ssh
+6) run ./load_controller_to_memcached.ps1 (if some libraries are not install like pip, python, docker, psutils, you can
+try to run sudo apt-get or sudo pip3 install ... from inside run_controller.ps1)
+7) from inside of ssh connection in powershell 4 you can find the scheduler_controller.py in controller folder and 
+you can run it with python3 scheduler_controller.py
+8) You can change memcached parameters like threads or cpus in set_memcached_config.ps1. Be sure to change threads first and then
+change cpus with taskset and sed
+9) Overall workflow is that you change scheduler_controller.py in repository then upload it like in step 6) then run it from inside 
+powershell 4 which is sshed to memcached server and look for metrics how it performs. 
+10) If you get some errors in client-agent or client-measure while trying to rerun ./start_agent.ps1 or ./start_measure.ps1 then
+you can try to run kill_mcperf_process.ps1 client-agent or kill_mcperf_process.ps1 client-measure to stop them and then 
+you can try again to run start_agent and start_measure
+11) don't forget to finish_cluster.ps1 in the end

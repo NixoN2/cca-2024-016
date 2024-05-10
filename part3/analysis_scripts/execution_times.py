@@ -7,6 +7,7 @@ data_dir = os.path.join(script_dir, "..", "runs")
 
 run_data = {}
 pattern = r"Job:\s+(\S+)\s+Job time:\s+(\d+:\d+:\d+)"
+pattern_1 = r"Job:\s+(\S+)\s+Total time:\s+(\d+:\d+:\d+)"
 
 print("Extracting Execution Times...")
 
@@ -18,11 +19,17 @@ for i in range(3):
         content = file.read()
 
     matches = re.findall(pattern, content)
+    matches_1 = re.findall(pattern_1, content)
 
     job_times = {}
     for match in matches:
         job_name = match[0]
         job_name = job_name[7:]
+        time = match[1]
+        job_times[job_name] = time
+
+    for match in matches_1:
+        job_name = match[0]
         time = match[1]
         job_times[job_name] = time
     
@@ -31,9 +38,9 @@ for i in range(3):
 print("Analysing Execution Times...")
 time_df = pd.DataFrame(run_data)
 time_df = time_df.apply(pd.to_timedelta).map(lambda x: x.total_seconds())
-total_row = pd.DataFrame(time_df.sum(axis=0)).T
-total_row.index=['total time']
-time_df = pd.concat([time_df, total_row])
+# total_row = pd.DataFrame(time_df.sum(axis=0)).T
+# total_row.index=['total time']
+# time_df = pd.concat([time_df, total_row])
 time_df['mean'] = time_df.mean(axis=1)
 time_df['std_dev'] = time_df.std(axis=1, ddof=2)
 

@@ -4,7 +4,9 @@ from typing import TypedDict, List, Dict, Optional
 from datetime import datetime
 import time
 import urllib.parse
-
+import subprocess
+from enum import Enum
+import time
 
 LOG_STRING = "{timestamp} {event} {job_name} {args}"
 
@@ -70,7 +72,7 @@ jobs: Dict[str, JobParams] = {
         'detach': True,
         'remove': True,
         'name': 'blacksholes',
-        'cpuset_cpus': '0',
+        'cpuset_cpus': '2,3',
         'weight': 2
     },
     'radix': {
@@ -79,7 +81,7 @@ jobs: Dict[str, JobParams] = {
         'detach': True,
         'remove': True,
         'name': 'radix',
-        'cpuset_cpus': '0',
+        'cpuset_cpus': '2,3',
         'weight': 1
     },
     'canneal': {
@@ -88,25 +90,25 @@ jobs: Dict[str, JobParams] = {
         'detach': True,
         'remove': True,
         'name': 'canneal',
-        'cpuset_cpus': '0',
+        'cpuset_cpus': '2,3',
         'weight': 1
     },
-    'vips': {
+    'vips-job': {
         'image': "anakli/cca:parsec_vips",
         'command': ['./run', '-a', 'run', '-S', 'parsec', '-p', 'vips', '-i', 'native', '-n', '1'],
         'detach': True,
         'remove': True,
-        'name': 'vips',
-        'cpuset_cpus': '0',
+        'name': 'vips-job',
+        'cpuset_cpus': '2,3',
         'weight': 2
     },
     'freqmine': {
         'image': "anakli/cca:parsec_freqmine",
-        'command': ['./run', '-a', 'run', '-S', 'parsec', '-p', 'freqmine', '-i', 'native', '-n', '1'],
+        'command': ['./run', '-a', 'run', '-S', 'parsec', '-p', 'freqmine', '-i', 'native', '-n', '4'],
         'detach': True,
         'remove': True,
         'name': 'freqmine',
-        'cpuset_cpus': '0',
+        'cpuset_cpus': '2,3',
         'weight': 3
     },
     'dedup': {
@@ -115,16 +117,16 @@ jobs: Dict[str, JobParams] = {
         'detach': True,
         'remove': True,
         'name': 'dedup',
-        'cpuset_cpus': '0',
+        'cpuset_cpus': '2,3',
         'weight': 2
     },
     'ferret': {
         'image': "anakli/cca:parsec_ferret",
-        'command': ['./run', '-a', 'run', '-S', 'parsec', '-p', 'ferret', '-i', 'native', '-n', '1'],
+        'command': ['./run', '-a', 'run', '-S', 'parsec', '-p', 'ferret', '-i', 'native', '-n', '4'],
         'detach': True,
         'remove': True,
         'name': 'ferret',
-        'cpuset_cpus': '0',
+        'cpuset_cpus': '2,3',
         'weight': 3
     }
 }
@@ -136,10 +138,17 @@ class Job:
     def get_job(self) -> JobParams:
         return self.job
     
+    def get_name(self) -> str:
+        return self.job['name']
+    
+    def equals_cpuset_cpus(self, cpuset_cpus: List[int]):
+        cpuset_cpus = ','.join(map(str, cpuset_cpus))
+        return self.job['cpuset_cpus'] == cpuset_cpus
+    
     def set_threads(self, num_threads: int):
         self.job['command'].insert(1, '-t')
         self.job['command'].insert(2, str(num_threads))
-        self.job['command'][-1] = str(2 * num_threads)
+        self.job['command'][-1] = str(num_threads)
 
     def set_cpus(self, cpus: List[int]):
         self.job['cpuset_cpus'] = ','.join(map(str, cpus))
@@ -157,23 +166,58 @@ class Job:
     def set_completed(self):
         self.job['completed'] = True
 
+class Load(Enum):
+    HIGH = 1,
+    LOW = 2
+
 class Controller:
     def __init__(self, jobs: Dict[str, JobParams], logger: SchedulerLogger):
         self.logger = logger
         self.completed_jobs = 0
-        self.running_jobs: List[JobParams] = []
+        self.job = None
         self.jobs = jobs
         self.client = docker.from_env()
         self.jobs_to_run = []
+        self.load = Load.LOW
+        self.cores = [0]
+        self.memcached_pid = self.get_memcached_pid()
+        self.set_memcached_cpus(self.cores)
+        self.low_load_job_cpus = [1,2,3]
+        self.high_load_job_cpus = [2,3]
+        self.low_load_memcached_cpus = [0]
+        self.high_load_memcached_cpus = [0,1]
+        self.threshold = 70
+        self.start_time = time.time()
+        self.fails = 0
+        self.fails_time = time.time()
+
+    def get_memcached_pid(self):
+        try:
+            output = subprocess.check_output(["pidof", "memcached"])
+            pids = output.decode("utf-8").strip().split()
+            return int(pids[0])
+        except subprocess.CalledProcessError:
+            return None
+        
+    def set_memcached_cpus(self, cpus: List[int]):
+        if not self.memcached_pid:
+            raise ValueError("Memcached pid is not found")
+        process = psutil.Process(self.memcached_pid)
+        process.cpu_affinity(cpus)
+
+    def set_load(self, load: Load):
+        self.load = load
+
+    def set_cores(self, cores: List[int]):
+        self.cores = cores
 
     def set_jobs_to_run(self, job_names: List[str]):
         self.jobs_to_run = job_names
 
     def check_jobs(self):
         containers = self.client.containers.list()
-
-        for job in self.running_jobs:
-            job_name = job['name']
+        if self.job:
+            job_name = self.job.get_name()
             job_found = False
             for container in containers:
                 if container.name == job_name:
@@ -181,49 +225,104 @@ class Controller:
                     break
             if not job_found:
                 self.set_job_completed(job_name)
-
-        for container in containers:
-            print(f"Name: {container.name}")
-            print(f"Status: {container.status}")
-            print("--------------")
+        # try:
+        #     for container in containers:
+        #         print(f"Name: {container.name}")
+        #         print(f"Status: {container.status}")
+        #         print(f"Cores: {self.cores}")
+        #         print("--------------")
+        # except:
+        #     return
 
     def get_cpu_load(self):
-        return psutil.cpu_percent()
+        cpu_usage = psutil.cpu_percent(0.5, True)
+        # print("cpu usage per core", cpu_usage)
+        usage = 0
+        for core in self.cores:
+            usage += cpu_usage[core]
+        # print("total cpu usage on used cores", usage)
+        return usage
     
-    def run_job(self, job_name: str, cpuset_cpus: List[int] | None = None, threads: int = 1):
+    def is_two_cpus_busy(self):
+        return len(self.cores) == 2
+    
+    def is_high_load(self, cpu_usage: float):
+        if self.is_two_cpus_busy() and cpu_usage >= self.threshold * 2:
+            return True
+
+        if not self.is_two_cpus_busy() and cpu_usage >= self.threshold:
+            return True
+
+        return False
+    
+    def get_free_cpus(self):
+        if self.load == Load.HIGH:
+            return self.high_load_job_cpus
+        return self.low_load_job_cpus
+    
+    def run_job(self, job_name: str):
         job = self.jobs[job_name]
         parsed_job = Job(job)
-        if cpuset_cpus:
-            parsed_job.set_cpus(cpuset_cpus)
-        if threads != 1:
-            parsed_job.set_threads(threads)
+        free_cpus = self.get_free_cpus()
+        if job_name == "freqmine" or job_name == "ferret":
+            parsed_job.set_cpus(self.low_load_job_cpus)
+        else:
+            parsed_job.set_cpus(free_cpus)
+            parsed_job.set_threads(len(free_cpus))
+        # parsed_job.set_cpus(free_cpus)
+        # parsed_job.set_threads(len(free_cpus))
         self.client.containers.run(**parsed_job.build_docker_job())
-        self.running_jobs.append(job)
+        self.job = parsed_job
         self.jobs_to_run = [job_to_run for job_to_run in self.jobs_to_run if job_to_run != job_name]
         self.logger.job_start(job_name, job['cpuset_cpus'], job['command'])
-        print("Job " + job_name + " is running")
+        print("time:", time.time() - self.start_time)
+        print("Job " + job_name + " is running with cpus ", free_cpus, " and threads ", len(free_cpus), "freqmine special case (1 thread -n 8)")
 
     def update_job_cpus(self, container_name: str, cpus: List[int]):
-        container = self.client.containers.get(container_name)
-        container.update(cpuset_cpus=','.join(map(str, cpus)))
-        self.logger.update_cores(container_name, list(map(str, cpus)))
+        # if container_name == "ferret" or container_name == "freqmine":
+        #     return
+
+        t = time.time()
+        if self.fails == 0 and self.load == Load.HIGH:
+            self.fails_time = t 
+            self.fails = 1
+
+
+        if self.load == Load.HIGH and t - self.fails_time < 10:
+            self.fails += 1
+
+        if self.fails == 2 and t - self.fails_time > 15:
+            self.fails = 0
+
+        if self.fails == 2 and len(cpus) == 3:
+            return
+
+        try:
+            container = self.client.containers.get(container_name)
+            container.update(cpuset_cpus=','.join(map(str, cpus)))
+
+            if self.job and (self.job.get_name() == "freqmine" or self.job.get_name() == "ferret"):
+                self.job.set_cpus(cpus)
+            elif self.job:
+                self.job.set_cpus(cpus)
+                self.job.set_threads(len(cpus))
+
+            # self.job.set_cpus(cpus)
+            # self.job.set_threads(len(cpus))
+            self.logger.update_cores(container_name, list(map(str, cpus)))
+            print("time:", time.time() - self.start_time)
+            print("cpu usage:", self.get_cpu_load())
+            print("updating cores for", container_name, cpus)
+        except:
+            return
 
     def set_job_completed(self, job_name: str):
         self.completed_jobs += 1
-        self.running_jobs = [job for job in self.running_jobs if job['name'] != job_name]  
+        self.job = None 
         self.jobs.pop(job_name)
         self.logger.job_end(job_name)
+        print("time:", time.time() - self.start_time)
         print(job_name + " finished")
-
-    def pause_container(self, container_name: str):
-        container = self.client.containers.get(container_name)
-        container.pause()
-        self.logger.job_pause(container_name)
-
-    def unpause_container(self, container_name: str):
-        container = self.client.containers.get(container_name)
-        container.unpause()
-        self.logger.job_unpause(container_name)
 
     def get_job_with_lowest_weight(self) -> Optional[JobParams]:
         filtered_jobs = [job for job_name, job in self.jobs.items() if job_name in self.jobs_to_run]
@@ -239,28 +338,63 @@ class Controller:
 
         return max(filtered_jobs, key=lambda job: job['weight'])
     
+    def check_cpu_usage(self):
+        cpu_usage = self.get_cpu_load()
+
+        if self.is_high_load(cpu_usage) and self.is_two_cpus_busy():
+            return 
+        
+        if self.is_high_load(cpu_usage) and not self.is_two_cpus_busy():
+            self.set_cores(self.high_load_memcached_cpus)
+            self.set_memcached_cpus(self.cores)
+            self.set_load(Load.HIGH)
+            return
+
+        if not self.is_high_load(cpu_usage) and self.is_two_cpus_busy():
+            self.set_cores(self.low_load_memcached_cpus)
+            self.set_memcached_cpus(self.cores)
+            self.set_load(Load.LOW)
+            return
+
+
     def evaluate_scheduling_policy(self):
         if len(self.jobs_to_run) == 0 or not self.jobs_to_run:
             raise RuntimeError("You need to set job names to run using set_jobs_to_run")
         
         jobs_to_complete = len(self.jobs_to_run)
         while self.completed_jobs != jobs_to_complete:
-            if len(self.running_jobs) < 2:
-                easy_job = self.get_job_with_lowest_weight()
-                if easy_job:
-                    self.run_job(easy_job.get('name'), [1], 2)
-                hard_job = self.get_job_with_highest_weight()
-                if hard_job:
-                    self.run_job(hard_job.get('name'), [2,3], 4)
+            self.check_cpu_usage()
+            # print(self.load, "is high load", self.load == Load.HIGH)
+            if self.job:
+                if self.load == Load.HIGH and self.job.equals_cpuset_cpus(self.low_load_job_cpus):
+                    self.update_job_cpus(self.job.get_name(), self.high_load_job_cpus)
+                    self.check_jobs()
+                    time.sleep(0.5)
+                    continue
+
+                if self.load == Load.LOW and self.job.equals_cpuset_cpus(self.high_load_job_cpus):
+                    self.update_job_cpus(self.job.get_name(), self.low_load_job_cpus)
+                    self.check_jobs()
+                    time.sleep(0.5)
+                    continue
+                
+            else:
+                job_to_complete = None
+                if self.load == Load.HIGH:
+                    job_to_complete = self.get_job_with_lowest_weight()
+                else:
+                    job_to_complete = self.get_job_with_highest_weight()
+                
+                if job_to_complete:
+                    self.run_job(job_to_complete['name'])
 
             self.check_jobs()
-            print(controller.get_cpu_load())
-            time.sleep(5)
+            time.sleep(0.5)
         
 logger = SchedulerLogger()
 controller = Controller(jobs, logger)
 
-controller.set_jobs_to_run(["canneal", "radix", "blacksholes", "ferret", "dedup", "vips", "freqmine"])
+controller.set_jobs_to_run(["canneal", "radix", "blacksholes", "dedup", "vips-job", "ferret", "freqmine"])
 
 controller.evaluate_scheduling_policy()
 

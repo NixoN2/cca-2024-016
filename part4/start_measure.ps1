@@ -37,7 +37,7 @@ cd memcache-perf-dynamic;
 $remoteCommandMeasureTask2 = @"
 cd memcache-perf-dynamic;
 ./mcperf -s $memcacheServerIP --loadonly;
-./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 1800 --qps_interval 10 --qps_min 5000 --qps_max 100000;
+./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 540 --qps_interval 10 --qps_min 5000 --qps_max 100000;
 "@
 
 $remoteCommandMeasureTask3 = @"

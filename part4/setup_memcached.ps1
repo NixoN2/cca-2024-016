@@ -17,7 +17,7 @@ Write-Host "memcache-server ip:" $memcacheServerIP
 $remoteCommand = @"
 sudo apt update;
 sudo apt install -y python3;
-sudo apt install python3-pip;
+sudo apt install -y python3-pip;
 sudo apt install -y docker.io;
 sudo -S usermod -aG docker ubuntu;
 sudo pip3 install psutil;

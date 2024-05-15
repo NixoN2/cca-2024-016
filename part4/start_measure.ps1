@@ -37,19 +37,19 @@ cd memcache-perf-dynamic;
 $remoteCommandMeasureTask2 = @"
 cd memcache-perf-dynamic;
 ./mcperf -s $memcacheServerIP --loadonly;
-./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 540 --qps_interval 10 --qps_min 5000 --qps_max 100000;
+./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 240 --qps_interval 10 --qps_min 5000 --qps_max 100000;
 "@
 
 $remoteCommandMeasureTask3 = @"
 cd memcache-perf-dynamic;
 ./mcperf -s $memcacheServerIP --loadonly;
-./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 1800 --qps_interval 10 --qps_min 5000 --qps_max 100000 --qps_seed 3274;
+./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 600 --qps_interval 10 --qps_min 5000 --qps_max 100000 --qps_seed 3274;
 "@
 
 $remoteCommandMeasureTask4 = @"
 cd memcache-perf-dynamic;
 ./mcperf -s $memcacheServerIP --loadonly;
-./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 1800 --qps_interval 5 --qps_min 5000 --qps_max 100000 --qps_seed 3274;
+./mcperf -s $memcacheServerIP -a $clientAgentIP --noload -T 16 -C 4 -D 4 -Q 1000 -c 4 -t 600 --qps_interval 5 --qps_min 5000 --qps_max 100000 --qps_seed 3274;
 "@
 
 $remoteCommandMeasure= @"
@@ -59,7 +59,7 @@ cd memcache-perf-dynamic;
 "@
 
 $gcloudCommandMeasure = @"
-gcloud compute ssh --ssh-key-file $sshKeyFile ubuntu@$clientMeasure --zone europe-west3-a --command "$remoteCommandMeasureTask2"
+gcloud compute ssh --ssh-key-file $sshKeyFile ubuntu@$clientMeasure --zone europe-west3-a --command "$remoteCommandMeasureTask4"
 "@
 
 $outputFilePath = "mcperf.txt"

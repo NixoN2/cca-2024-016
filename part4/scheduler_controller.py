@@ -16,8 +16,11 @@ class SchedulerLogger:
 
         self.file = open(f"log{start_date}.txt", "w")
         self._log("start", "scheduler")
+        self.job_start("memcached", [0], 2)
 
     def _log(self, event: str, job_name: str, args: str = "") -> None:
+        if job_name == "vips-job":
+            job_name = "vips"
         self.file.write(
             LOG_STRING.format(timestamp=datetime.now().isoformat(), event=event, job_name=job_name,
                               args=args).strip() + "\n")
@@ -186,7 +189,7 @@ class Controller:
         self.high_load_job_cpus = [2,3]
         self.low_load_memcached_cpus = [0]
         self.high_load_memcached_cpus = [0,1]
-        self.threshold = 70
+        self.threshold = 40
         self.start_time = time.time()
         self.fails = 0
         self.fails_time = time.time()
@@ -241,6 +244,7 @@ class Controller:
         for core in self.cores:
             usage += cpu_usage[core]
         # print("total cpu usage on used cores", usage)
+        self.logger.custom_event("logger", "memcached cores " + self.get_cores(self.cores))
         return usage
     
     def is_two_cpus_busy(self):
@@ -264,7 +268,8 @@ class Controller:
         job = self.jobs[job_name]
         parsed_job = Job(job)
         free_cpus = self.get_free_cpus()
-        if job_name == "freqmine" or job_name == "ferret":
+        is_heavy_job = job_name == "freqmine" or job_name == "ferret"
+        if is_heavy_job:
             parsed_job.set_cpus(self.low_load_job_cpus)
         else:
             parsed_job.set_cpus(free_cpus)
@@ -274,10 +279,22 @@ class Controller:
         self.client.containers.run(**parsed_job.build_docker_job())
         self.job = parsed_job
         self.jobs_to_run = [job_to_run for job_to_run in self.jobs_to_run if job_to_run != job_name]
-        self.logger.job_start(job_name, job['cpuset_cpus'], job['command'])
+        if is_heavy_job:
+            self.logger.job_start(job_name, [str(cpu) for cpu in free_cpus], 1)
+        else:
+            self.logger.job_start(job_name, [str(cpu) for cpu in free_cpus], len(free_cpus))
+        self.logger.custom_event(job_name, "memcached cores " + self.get_cores(self.cores))
         print("time:", time.time() - self.start_time)
         print("Job " + job_name + " is running with cpus ", free_cpus, " and threads ", len(free_cpus), "freqmine special case (1 thread -n 8)")
 
+    def get_cores(self, cpus: List[int]):
+        result = ""
+        for i, cpu in enumerate(cpus):
+            result += str(cpu)
+            if i != len(cpus) - 1:
+                result += ", "
+        return result
+    
     def update_job_cpus(self, container_name: str, cpus: List[int]):
         # if container_name == "ferret" or container_name == "freqmine":
         #     return
@@ -309,7 +326,8 @@ class Controller:
 
             # self.job.set_cpus(cpus)
             # self.job.set_threads(len(cpus))
-            self.logger.update_cores(container_name, list(map(str, cpus)))
+            self.logger.update_cores(container_name, [str(cpu) for cpu in cpus])
+            self.logger.custom_event(container_name, "memcached cores " + self.get_cores(self.cores))
             print("time:", time.time() - self.start_time)
             print("cpu usage:", self.get_cpu_load())
             print("updating cores for", container_name, cpus)
@@ -321,6 +339,7 @@ class Controller:
         self.job = None 
         self.jobs.pop(job_name)
         self.logger.job_end(job_name)
+        self.logger.custom_event(job_name, "memcached cores " + self.get_cores(self.cores))
         print("time:", time.time() - self.start_time)
         print(job_name + " finished")
 
@@ -397,5 +416,7 @@ controller = Controller(jobs, logger)
 controller.set_jobs_to_run(["canneal", "radix", "blacksholes", "dedup", "vips-job", "ferret", "freqmine"])
 
 controller.evaluate_scheduling_policy()
+
+time.sleep(120)
 
 logger.end()

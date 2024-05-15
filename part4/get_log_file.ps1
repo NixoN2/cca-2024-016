@@ -10,7 +10,7 @@ $memcacheServer = $nodesOutput -split "`n" | ForEach-Object {
 Write-Host "memcache-server:" $memcacheServer
 
 $remoteCommand = @"
-sudo python3 controller/scheduler_controller.py;
+cat controller/
 "@
 
 

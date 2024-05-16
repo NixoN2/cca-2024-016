@@ -1,0 +1,1 @@
+kops delete cluster part4.k8s.local --yes
